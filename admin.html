@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rooh Admin Panel</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- Babel to compile JSX in the browser -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <style>
+        .fade-in { animation: fadeIn 0.4s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="bg-stone-50 text-stone-800 font-sans">
+    <div id="root"></div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
+
+        // --- INTEGRATED FIREBASE CONFIG ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyADfpBxUCFO9iXrsjfGEEycfCAzZiTfxVs",
+            authDomain: "rooh-store.firebaseapp.com",
+            projectId: "rooh-store",
+            storageBucket: "rooh-store.firebasestorage.app",
+            messagingSenderId: "491389749038",
+            appId: "1:491389749038:web:8e27d42a2d2415ad5c9cbf"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const storage = getStorage(app);
+        const appId = 'rooh-store-production';
+
+        // Expose Firebase to our Babel script
+        window.FB = { auth, db, storage, appId, signInWithEmailAndPassword, onAuthStateChanged, signOut, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, ref, uploadBytes, getDownloadURL, updatePassword, EmailAuthProvider, reauthenticateWithCredential, query, orderBy };
+    </script>
+    
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // --- ICONS MAPPING ---
+        const Icon = ({ name, size = 24, className = "" }) => {
+            const iconRef = useRef(null);
+
+            useEffect(() => {
+                if (window.lucide && iconRef.current) {
+                    iconRef.current.innerHTML = `<i data-lucide="${name}" class="${className}"></i>`;
+                    window.lucide.createIcons({
+                        root: iconRef.current,
+                        attrs: { width: size, height: size }
+                    });
+                }
+            }, [name, size, className]);
+
+            return <span ref={iconRef} className="inline-flex items-center justify-center align-middle"></span>;
+        };
+
+        // --- MOCK DATA ---
+        const MAIN_CATEGORIES = ["Footwear", "Bags"];
+        const AVAILABLE_COLORS = ["Gold", "Pink", "Green", "White", "Blue", "Orange", "Black", "Red"];
+
+        const INITIAL_PRODUCTS = [
+            { id: 1, name: "Rose Dust Zardosi", price: "2499", mainCategory: "Footwear", subCategory: "Bridal", color: "Pink", image: "https://images.unsplash.com/photo-1560769629-975ec94e6a86?auto=format&fit=crop&q=80&w=800", pairedProductId: 5 },
+            { id: 2, name: "Emerald Garden", price: "1899", mainCategory: "Footwear", subCategory: "Juttis", color: "Green", image: "https://images.unsplash.com/photo-1543163521-1bf539c55dd2?auto=format&fit=crop&q=80&w=800" },
+            { id: 5, name: "Rose Dust Potli", price: "1499", mainCategory: "Bags", subCategory: "Potli", color: "Pink", image: "https://images.unsplash.com/photo-1584916201218-f4242ceb4809?auto=format&fit=crop&q=80&w=800", pairedProductId: 1 }
+        ];
+
+        const INITIAL_SETTINGS = {
+            bannerActive: false,
+            bannerImage: "https://images.unsplash.com/photo-1603145733146-2d023192bd80?auto=format&fit=crop&q=80&w=2000",
+            bannerTitle: "The Festive Edit",
+            bannerSubtitle: "Flat 20% Off on Premium Styles",
+            bannerCTA: "Shop the Sale",
+            logo: null
+        };
+
+        const getColorHex = (name) => {
+            const colors = { 'gold': '#D4AF37', 'pink': '#FFC0CB', 'green': '#2E8B57', 'white': '#FFFFFF', 'blue': '#000080', 'orange': '#FFA500', 'black': '#000000', 'red': '#8B0000' };
+            return colors[name.toLowerCase()] || '#ccc';
+        };
+
+        // --- LOGIN SCREEN COMPONENT ---
+        const LoginScreen = ({ onLogin }) => {
+    const [loading, setLoading] = useState(false);
+    // Add these state variables to track inputs
+    const [email, setEmail] = useState("admin@rooh.com"); 
+    const [password, setPassword] = useState("");
+
+    const handleLogin = (e) => {
+        e.preventDefault();
+        setLoading(true);
+        // Pass the actual state values to the onLogin function
+        onLogin(email, password); 
+        setLoading(false);
+    };
+
+    return (
+        <div className="min-h-screen flex items-center justify-center bg-[#FAF9F6] p-4 fade-in">
+            <div className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-md border border-stone-100">
+                <div className="text-center mb-10">
+                    <h1 className="font-serif text-4xl text-stone-900 tracking-widest mb-1">ROOH</h1>
+                    <p className="text-[10px] tracking-[0.3em] uppercase text-[#C5A059]">Admin Access</p>
+                </div>
+
+                <form onSubmit={handleLogin} className="space-y-6">
+                    <div className="space-y-2">
+                        <label className="text-xs font-bold uppercase text-stone-400 pl-1 tracking-wider">Email</label>
+                        <div className="relative">
+                            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400">
+                                <Icon name="mail" size={18} />
+                            </div>
+                            <input 
+                                type="email" 
+                                required 
+                                value={email} 
+                                onChange={(e) => setEmail(e.target.value)} 
+                                className="w-full pl-12 pr-4 py-4 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#C5A059]/50 transition-all text-stone-700"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="space-y-2">
+                        <label className="text-xs font-bold uppercase text-stone-400 pl-1 tracking-wider">Password</label>
+                        <div className="relative">
+                            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400">
+                                <Icon name="lock" size={18} />
+                            </div>
+                            <input 
+                                type="password" 
+                                required 
+                                value={password} 
+                                onChange={(e) => setPassword(e.target.value)} 
+                                className="w-full pl-12 pr-4 py-4 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#C5A059]/50 transition-all text-stone-700"
+                            />
+                        </div>
+                    </div>
+
+                    <button type="submit" disabled={loading} className="w-full bg-stone-900 text-white py-4 rounded-xl hover:bg-[#C5A059] transition-colors font-medium flex justify-center items-center gap-2 mt-4 uppercase tracking-widest text-sm shadow-lg">
+                        {loading ? <Icon name="loader-2" size={20} className="animate-spin" /> : "Sign In"}
+                    </button>
+                </form>
+            </div>
+        </div>
+    );
+};
+          
+        
+        // --- DASHBOARD COMPONENT ---
+        const AdminDashboard = ({ onLogout, products, setProducts, subCategories, setSubCategories, storeSettings, setStoreSettings }) => {
+            const [activeTab, setActiveTab] = useState('products');
+            
+            // Forms State
+            const [newCategory, setNewCategory] = useState("");
+            const [editingPriceId, setEditingPriceId] = useState(null);
+            
+            const [newProduct, setNewProduct] = useState({
+                name: "", price: "", mainCategory: "Footwear", subCategory: "Bridal", color: "Gold", description: "", image: "", pairedProductId: ""
+            });
+
+            // Password Change State
+            const [passData, setPassData] = useState({ current: "", new: "" });
+            const [passMessage, setPassMessage] = useState({ type: "", text: "" });
+
+            // Handlers
+            const handleImageUpload = async (e, target) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    try {
+        // 1. Create a reference in Firebase Storage
+        const storageRef = window.FB.ref(window.FB.storage, `store/${target}_${Date.now()}`);
+        
+        // 2. Upload the file
+        const snapshot = await window.FB.uploadBytes(storageRef, file);
+        
+        // 3. Get the permanent URL
+        const downloadURL = await window.FB.getDownloadURL(snapshot.ref);
+        
+        // 4. Update the state with the permanent URL
+        if (target === 'product') setNewProduct({ ...newProduct, image: downloadURL });
+        if (target === 'logo') setStoreSettings({ ...storeSettings, logo: downloadURL });
+        if (target === 'banner') setStoreSettings({ ...storeSettings, bannerImage: downloadURL });
+        
+        alert("Image uploaded successfully!");
+    } catch (error) {
+        alert("Upload failed: " + error.message);
+    }
+};
+
+const handleSaveSettings = async () => {
+    try {
+        await window.FB.setDoc(window.FB.doc(window.FB.db, "settings", "store"), {
+            ...storeSettings
+        });
+        alert("Store settings updated successfully!");
+    } catch (error) {
+        alert("Error updating settings: " + error.message);
+    }
+};
+            const handleAddProduct = async () => {
+    if (!newProduct.name || !newProduct.price) return alert("Name and Price are required.");
+    
+    try {
+        // Save to Firebase 'products' collection
+        await window.FB.addDoc(window.FB.collection(window.FB.db, "products"), {
+            ...newProduct,
+            id: Date.now(), // Unique ID
+            createdAt: new Date()
+        });
+        
+        // Clear form
+        setNewProduct({ name: "", price: "", mainCategory: "Footwear", subCategory: "Bridal", color: "Gold", description: "", image: "", pairedProductId: "" });
+        alert("Product successfully added to the store!");
+    } catch (error) {
+        // This will trigger if your security rules block the user
+        alert("Security Error: Only authorized admins can save products.");
+    }
+};
+
+            const handleAddCategory = async () => {
+    if (newCategory.trim()) {
+        try {
+            // Save the entire updated array to a single document in Firestore
+            const updatedCategories = [...subCategories, newCategory.trim()];
+            await window.FB.setDoc(window.FB.doc(window.FB.db, "settings", "categories"), {
+                list: updatedCategories
+            });
+            setNewCategory("");
+            alert("Category saved to cloud!");
+        } catch (error) {
+            alert("Error saving category: " + error.message);
+        }
+    }
+};
+
+            const handleChangePassword = async (e) => {
+    e.preventDefault();
+    setPassMessage({ type: "info", text: "Updating password..." });
+
+    try {
+        const user = window.FB.auth.currentUser;
+        // Firebase requires re-authentication for sensitive actions
+        const credential = window.FB.EmailAuthProvider.credential(user.email, passData.current);
+        await window.FB.reauthenticateWithCredential(user, credential);
+        
+        // Update the password in the cloud
+        await window.FB.updatePassword(user, passData.new);
+        
+        setPassMessage({ type: "success", text: "Password updated successfully!" });
+        setPassData({ current: "", new: "" });
+    } catch (error) {
+        setPassMessage({ type: "error", text: error.message });
+    }
+};
+
+            return (
+                <div className="min-h-screen bg-stone-50 flex flex-col md:flex-row fade-in">
+                    {/* SIDEBAR */}
+                    <div className="w-full md:w-64 bg-stone-900 text-[#FAF9F6] p-6 flex flex-col shadow-2xl z-20">
+                        <div className="mb-10 text-center md:text-left mt-2">
+                            <h2 className="font-serif text-3xl tracking-widest">ROOH</h2>
+                            <p className="text-[10px] tracking-[0.3em] text-[#C5A059] uppercase mt-1">Admin Panel</p>
+                        </div>
+
+                        <nav className="flex md:flex-col gap-2 overflow-x-auto md:overflow-visible no-scrollbar mb-6 md:mb-0">
+                            <button onClick={() => setActiveTab('products')} className={`flex-shrink-0 flex items-center gap-3 w-auto md:w-full p-4 rounded-xl transition-all font-medium text-sm tracking-wide ${activeTab === 'products' ? 'bg-[#C5A059] text-stone-900 shadow-md' : 'text-stone-400 hover:bg-stone-800 hover:text-white'}`}>
+                                <Icon name="shopping-bag" size={20} /> <span className="hidden md:inline">Manage Products</span>
+                            </button>
+                            <button onClick={() => setActiveTab('collections')} className={`flex-shrink-0 flex items-center gap-3 w-auto md:w-full p-4 rounded-xl transition-all font-medium text-sm tracking-wide ${activeTab === 'collections' ? 'bg-[#C5A059] text-stone-900 shadow-md' : 'text-stone-400 hover:bg-stone-800 hover:text-white'}`}>
+                                <Icon name="layers" size={20} /> <span className="hidden md:inline">Categories</span>
+                            </button>
+                            <button onClick={() => setActiveTab('banner')} className={`flex-shrink-0 flex items-center gap-3 w-auto md:w-full p-4 rounded-xl transition-all font-medium text-sm tracking-wide ${activeTab === 'banner' ? 'bg-[#C5A059] text-stone-900 shadow-md' : 'text-stone-400 hover:bg-stone-800 hover:text-white'}`}>
+                                <Icon name="image" size={20} /> <span className="hidden md:inline">Store Settings</span>
+                            </button>
+                        </nav>
+
+                        <button onClick={onLogout} className="mt-auto hidden md:flex items-center gap-3 text-stone-500 hover:text-red-400 transition-colors p-4 text-sm font-medium tracking-wide">
+                            <Icon name="log-out" size={20} /> Exit Admin
+                        </button>
+                    </div>
+
+                    {/* MAIN CONTENT */}
+                    <div className="flex-grow p-4 md:p-10 overflow-y-auto h-screen">
+                        
+                        {/* Mobile Header */}
+                        <div className="flex justify-between items-center mb-8 md:hidden px-2">
+                            <h2 className="font-serif text-2xl text-stone-900">Dashboard</h2>
+                            <button onClick={onLogout} className="text-red-500 p-2"><Icon name="log-out" size={20} /></button>
+                        </div>
+
+                        <div className="max-w-5xl mx-auto space-y-8 fade-in">
+                            
+                            {/* --- PRODUCTS TAB --- */}
+                            {activeTab === 'products' && (
+                                <React.Fragment>
+                                    <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-stone-200">
+                                        <h3 className="font-serif text-2xl mb-6 text-stone-900 flex items-center gap-3">
+                                            <Icon name="plus-circle" size={24} className="text-[#C5A059]" /> Add New Product
+                                        </h3>
+                                        
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                                            <div className="md:col-span-2 space-y-5">
+                                                <input placeholder="Product Name (e.g. Rose Dust Zardosi)" className="w-full p-4 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-[#C5A059]/50 outline-none" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} />
+                                                
+                                                <div className="grid grid-cols-2 gap-5">
+                                                    <input placeholder="Price (₹)" type="number" className="w-full p-4 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-[#C5A059]/50 outline-none" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} />
+                                                    
+                                                    <select className="w-full p-4 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-[#C5A059]/50 outline-none appearance-none" value={newProduct.mainCategory} onChange={e => setNewProduct({...newProduct, mainCategory: e.target.value})}>
+                                                        {MAIN_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                                                    </select>
+                                                </div>
+
+                                                <div className="grid grid-cols-2 gap-5">
+                                                    <select className="w-full p-4 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-[#C5A059]/50 outline-none appearance-none" value={newProduct.subCategory} onChange={e => setNewProduct({...newProduct, subCategory: e.target.value})}>
+                                                        {subCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                                                    </select>
+
+                                                    <select className="w-full p-4 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-[#C5A059]/50 outline-none appearance-none text-sm" value={newProduct.pairedProductId} onChange={e => setNewProduct({...newProduct, pairedProductId: e.target.value})}>
+                                                        <option value="">No Paired Product</option>
+                                                        {products.map(p => <option key={p.id} value={p.id}>Pair with: {p.name}</option>)}
+                                                    </select>
+                                                </div>
+
+                                                <div>
+                                                    <label className="text-xs font-bold uppercase text-stone-500 mb-3 block tracking-widest">Select Color</label>
+                                                    <div className="flex flex-wrap gap-3">
+                                                        {AVAILABLE_COLORS.map(c => (
+                                                            <button key={c} type="button" onClick={() => setNewProduct({...newProduct, color: c})} className={`w-10 h-10 rounded-full border-2 transition-all flex items-center justify-center shadow-sm ${newProduct.color === c ? 'ring-2 ring-offset-2 ring-stone-800 border-transparent scale-110' : 'border-stone-200 hover:scale-105'}`} style={{backgroundColor: getColorHex(c)}} title={c}>
+                                                                {newProduct.color === c && <Icon name="check" size={16} className={c === 'White' ? 'text-black' : 'text-white'} />}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                                
+                                                <textarea placeholder="Product Description..." rows="2" className="w-full p-4 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-[#C5A059]/50 outline-none resize-none" value={newProduct.description} onChange={e => setNewProduct({...newProduct, description: e.target.value})} />
+                                            </div>
+
+                                            <div className="md:col-span-1 flex flex-col gap-4">
+                                                <label className="text-xs font-bold uppercase text-stone-500 tracking-widest">Product Image</label>
+                                                
+                                                {newProduct.image ? (
+                                                    <div className="relative aspect-[3/4] rounded-2xl overflow-hidden border border-stone-200 group shadow-sm">
+                                                        <img src={newProduct.image} className="w-full h-full object-cover" />
+                                                        <button onClick={() => setNewProduct({...newProduct, image: ''})} className="absolute top-3 right-3 bg-white p-2 rounded-full text-red-500 shadow-md hover:bg-red-50 transition-colors z-10"><Icon name="trash-2" size={16} /></button>
+                                                    </div>
+                                                ) : (
+                                                    <label className="flex-grow flex flex-col items-center justify-center gap-3 bg-stone-50 hover:bg-stone-100 border-2 border-dashed border-stone-300 rounded-2xl cursor-pointer transition-colors aspect-[3/4]">
+                                                        <Icon name="upload-cloud" size={32} className="text-stone-400" />
+                                                        <span className="text-sm font-medium text-stone-500">Upload Image</span>
+                                                        <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, 'product')} />
+                                                    </label>
+                                                )}
+                                                
+                                                <button onClick={handleAddProduct} className="w-full bg-stone-900 text-white py-4 rounded-xl font-bold uppercase tracking-widest text-sm hover:bg-[#C5A059] transition-colors shadow-lg mt-auto">
+                                                    Save Product
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Inventory Table */}
+                                    <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-stone-200">
+                                        <h3 className="font-serif text-2xl mb-6 text-stone-900">Current Inventory ({products.length})</h3>
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full text-left">
+                                                <thead className="bg-stone-50 text-xs font-bold uppercase text-stone-500 tracking-wider">
+                                                    <tr>
+                                                        <th className="p-4 rounded-tl-xl">Item</th>
+                                                        <th className="p-4">Category</th>
+                                                        <th className="p-4">Price</th>
+                                                        <th className="p-4 rounded-tr-xl text-right">Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="text-sm text-stone-700 divide-y divide-stone-100">
+                                                    {products.map(p => (
+                                                        <tr key={p.id} className="hover:bg-stone-50/50 transition-colors">
+                                                            <td className="p-4 flex items-center gap-4">
+                                                                <img src={p.image} className="w-12 h-12 rounded-lg object-cover border border-stone-200 shadow-sm" />
+                                                                <div>
+                                                                    <p className="font-medium text-stone-900 text-base">{p.name}</p>
+                                                                    <div className="flex items-center gap-2 mt-1">
+                                                                        <span className="w-3 h-3 rounded-full border border-stone-300" style={{backgroundColor: getColorHex(p.color)}}></span>
+                                                                        <span className="text-xs text-stone-500">{p.color}</span>
+                                                                    </div>
+                                                                </div>
+                                                            </td>
+                                                            <td className="p-4 text-stone-500">{p.mainCategory} &bull; {p.subCategory}</td>
+                                                            <td className="p-4">
+                                                                {editingPriceId === p.id ? (
+                                                                    <div className="flex items-center gap-2">
+                                                                        <input id={`price-${p.id}`} defaultValue={p.price} className="w-24 p-2 border border-[#C5A059] rounded-lg outline-none" type="number" />
+                                                                        <button onClick={() => {
+                                                                            const val = document.getElementById(`price-${p.id}`).value;
+                                                                            setProducts(products.map(prod => prod.id === p.id ? {...prod, price: val} : prod));
+                                                                            setEditingPriceId(null);
+                                                                        }} className="p-2 bg-[#C5A059] text-white rounded-lg hover:bg-stone-900"><Icon name="check" size={16}/></button>
+                                                                    </div>
+                                                                ) : (
+                                                                    <span className="font-medium text-stone-900">₹ {p.price}</span>
+                                                                )}
+                                                            </td>
+                                                            <td className="p-4 text-right">
+                                                                <div className="flex justify-end gap-2">
+                                                                    <button onClick={() => setEditingPriceId(p.id)} className="p-2 text-stone-400 hover:text-blue-500 bg-white rounded-lg shadow-sm border border-stone-100 transition-colors" title="Edit Price"><Icon name="edit-2" size={16} /></button>
+                                                                    <button onClick={() => window.FB.deleteDoc(window.FB.doc(window.FB.db, "products", p.id))} className="p-2 text-stone-400 hover:text-red-500 bg-white rounded-lg shadow-sm border border-stone-100 transition-colors" title="Delete"><Icon name="trash-2" size={16} /></button>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </React.Fragment>
+                            )}
+
+                            {/* --- COLLECTIONS TAB --- */}
+                            {activeTab === 'collections' && (
+                                <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-stone-200 max-w-2xl">
+                                    <h3 className="font-serif text-2xl mb-2 text-stone-900">Manage Sub-Categories</h3>
+                                    <p className="text-sm text-stone-500 mb-8">Add styles (like Juttis) or occasions (like Bridal) to organize your products.</p>
+                                    
+                                    <div className="flex gap-4 mb-10">
+                                        <input value={newCategory} onChange={e => setNewCategory(e.target.value)} placeholder="e.g., Winter Edit, Heels..." className="flex-grow p-4 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-[#C5A059]/50 outline-none" />
+                                        <button onClick={handleAddCategory} className="bg-stone-900 text-white px-8 rounded-xl font-bold uppercase tracking-widest text-sm hover:bg-[#C5A059] transition-colors shadow-md">Add</button>
+                                    </div>
+
+                                    <div className="space-y-3">
+                                        <h4 className="text-xs font-bold uppercase text-stone-400 tracking-widest mb-4">Active Categories</h4>
+                                        {subCategories.map(cat => (
+                                            <div key={cat} className="flex justify-between items-center p-4 bg-stone-50 rounded-xl border border-stone-100 group transition-colors hover:border-stone-300">
+                                                <span className="font-medium text-stone-800">{cat}</span>
+                                                <button onClick={() => setSubCategories(subCategories.filter(c => c !== cat))} className="text-stone-300 hover:text-red-500 transition-colors" title="Remove Category">
+                                                    <Icon name="trash-2" size={18} />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* --- STORE SETTINGS TAB --- */}
+                            {activeTab === 'banner' && (
+                                <div className="space-y-8">
+                                    
+                                    <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-stone-200 max-w-2xl">
+                                        <h3 className="font-serif text-2xl mb-6 text-stone-900">Brand Identity</h3>
+                                        <div className="flex items-center gap-8">
+                                            <div className="w-24 h-24 rounded-full border-2 border-stone-200 flex items-center justify-center overflow-hidden bg-stone-50 shadow-inner">
+                                                {storeSettings.logo ? <img src={storeSettings.logo} className="w-full h-full object-cover"/> : <span className="text-stone-400 text-xs font-medium uppercase tracking-widest">No Logo</span>}
+                                            </div>
+                                            <div>
+                                                <label className="inline-flex items-center gap-2 px-6 py-3 bg-white border border-stone-300 rounded-xl cursor-pointer hover:bg-stone-50 transition-colors shadow-sm font-medium text-sm text-stone-700 mb-3">
+                                                    <Icon name="upload" size={16} /> Upload New Logo
+                                                    <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, 'logo')} />
+                                                </label>
+                                                <p className="text-xs text-stone-500 leading-relaxed max-w-xs">Upload a PNG or JPG logo. This will replace the text "ROOH" in the header of the customer site.</p>
+                                            </div>
+                                        </div>
+                                    </div>
+<div className="max-w-2xl mt-8">
+    <button onClick={handleSaveSettings} className="w-full bg-[#C5A059] text-stone-900 py-4 rounded-xl font-bold uppercase tracking-widest hover:bg-stone-900 hover:text-white transition-all shadow-lg">
+        Save All Store Settings
+    </button>
+</div>
+                                    <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-stone-200 max-w-2xl">
+                                        <div className="flex justify-between items-center mb-8">
+                                            <div>
+                                                <h3 className="font-serif text-2xl text-stone-900 mb-1">Promotional Banner</h3>
+                                                <p className="text-sm text-stone-500">Toggle to replace the default abstract background with a sale banner.</p>
+                                            </div>
+                                            <button onClick={() => setStoreSettings({...storeSettings, bannerActive: !storeSettings.bannerActive})} className={`w-14 h-8 rounded-full relative transition-colors shadow-inner ${storeSettings.bannerActive ? 'bg-[#C5A059]' : 'bg-stone-200'}`}>
+                                                <span className={`absolute top-1 left-1 bg-white w-6 h-6 rounded-full transition-transform shadow-md ${storeSettings.bannerActive ? 'translate-x-6' : 'translate-x-0'}`}></span>
+                                            </button>
+                                        </div>
+
+                                        <div className={`space-y-6 transition-opacity ${!storeSettings.bannerActive && 'opacity-50 pointer-events-none'}`}>
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-bold uppercase text-stone-500 tracking-widest pl-1">Event Title</label>
+                                                <input value={storeSettings.bannerTitle} onChange={e => setStoreSettings({...storeSettings, bannerTitle: e.target.value})} className="w-full p-4 bg-stone-50 border border-stone-200 rounded-xl outline-none" placeholder="e.g. The Festive Edit"/>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-bold uppercase text-stone-500 tracking-widest pl-1">Subtitle / Offer text</label>
+                                                <input value={storeSettings.bannerSubtitle} onChange={e => setStoreSettings({...storeSettings, bannerSubtitle: e.target.value})} className="w-full p-4 bg-stone-50 border border-stone-200 rounded-xl outline-none" placeholder="e.g. Flat 20% Off on Premium Styles"/>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-bold uppercase text-stone-500 tracking-widest pl-1">Banner Background Image</label>
+                                                <div className="flex flex-col gap-4">
+                                                    <label className="inline-flex w-fit items-center gap-2 px-6 py-3 bg-white border border-stone-300 rounded-xl cursor-pointer hover:bg-stone-50 transition-colors shadow-sm font-medium text-sm text-stone-700">
+                                                        <Icon name="image" size={16} /> Replace Background Image
+                                                        <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, 'banner')}/>
+                                                    </label>
+                                                    {storeSettings.bannerImage && (
+                                                        <div className="relative w-full h-40 rounded-xl overflow-hidden border border-stone-200 shadow-inner">
+                                                            <img src={storeSettings.bannerImage} className="w-full h-full object-cover" />
+                                                            <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
+                                                                <h4 className="text-white font-serif text-3xl drop-shadow-md">{storeSettings.bannerTitle}</h4>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Change Password Section */}
+                                    <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-stone-200 max-w-2xl">
+                                        <h3 className="font-serif text-2xl text-stone-900 mb-6 flex items-center gap-2"><Icon name="lock" size={24} className="text-[#C5A059]"/> Admin Security</h3>
+                                        <form onSubmit={handleChangePassword} className="space-y-4">
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-bold uppercase text-stone-500 tracking-widest pl-1">Current Password</label>
+                                                <input 
+                                                    type="password"
+                                                    required 
+                                                    value={passData.current} 
+                                                    onChange={e => setPassData({...passData, current: e.target.value})} 
+                                                    className="w-full p-4 bg-stone-50 border border-stone-200 rounded-xl outline-none focus:ring-2 focus:ring-[#C5A059]/50" 
+                                                    placeholder="••••••••"
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-bold uppercase text-stone-500 tracking-widest pl-1">New Password</label>
+                                                <input 
+                                                    type="password"
+                                                    required 
+                                                    value={passData.new} 
+                                                    onChange={e => setPassData({...passData, new: e.target.value})} 
+                                                    className="w-full p-4 bg-stone-50 border border-stone-200 rounded-xl outline-none focus:ring-2 focus:ring-[#C5A059]/50" 
+                                                    placeholder="New Password (min 6 chars)"
+                                                />
+                                            </div>
+                                            
+                                            {passMessage.text && (
+                                                <div className={`text-sm p-3 rounded-xl border ${passMessage.type === 'success' ? 'bg-green-50 text-green-700 border-green-200' : passMessage.type === 'error' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
+                                                    {passMessage.text}
+                                                </div>
+                                            )}
+
+                                            <button type="submit" className="bg-stone-900 text-white px-8 py-3 rounded-xl hover:bg-[#C5A059] transition-colors font-bold uppercase tracking-widest text-sm shadow-md mt-2">
+                                                Update Password
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+const App = () => {
+    const [user, setUser] = useState(null);
+    const [loading, setLoading] = useState(true);
+
+    const [products, setProducts] = useState([]); // Start empty to show live data
+    const [subCategories, setSubCategories] = useState(["Bridal", "Juttis", "Mules", "Potli", "Clutch", "Casual", "Festive"]);
+    const [storeSettings, setStoreSettings] = useState(INITIAL_SETTINGS);
+
+    // FIX 1: The Auth Listener (This stops the blank "Loading" screen)
+    useEffect(() => {
+        const unsubscribe = window.FB.onAuthStateChanged(window.FB.auth, (authUser) => {
+            setUser(authUser);
+            setLoading(false);
+        });
+        return () => unsubscribe();
+    }, []);
+
+    // FIX 2: Live Listeners for Products and Categories
+    useEffect(() => {
+        if (!user) return;
+        
+        // Listen for products
+        const q = window.FB.query(window.FB.collection(window.FB.db, "products"), window.FB.orderBy("createdAt", "desc"));
+        const unsubProducts = window.FB.onSnapshot(q, (snapshot) => {
+            setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        });
+
+        // Listen for category updates
+        const unsubCats = window.FB.onSnapshot(window.FB.doc(window.FB.db, "settings", "categories"), (doc) => {
+            if (doc.exists()) setSubCategories(doc.data().list);
+        });
+        
+        return () => { unsubProducts(); unsubCats(); };
+    }, [user]);
+
+    if (loading) return <div className="h-screen flex items-center justify-center font-serif text-xl">Loading Rooh Admin...</div>;
+
+    if (!user) {
+        return <LoginScreen onLogin={(email, password) => {
+            window.FB.signInWithEmailAndPassword(window.FB.auth, email, password)
+                .catch(err => alert("Login Error: " + err.message));
+        }} />;
+    }
+
+    return (
+        <AdminDashboard 
+            onLogout={() => window.FB.signOut(window.FB.auth)}
+            products={products} setProducts={setProducts}
+            subCategories={subCategories} setSubCategories={setSubCategories}
+            storeSettings={storeSettings} setStoreSettings={setStoreSettings}
+        />
+    );
+};
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
