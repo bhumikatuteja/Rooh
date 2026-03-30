@@ -695,8 +695,9 @@ const [currentPage, setCurrentPage] = useState('home');
     const unsubCats = window.FB.onSnapshot(
         window.FB.doc(window.FB.db, "settings", "categories"),
         (doc) => {
+        console.log("CATEGORY DOC:", doc.data());
             if (doc.exists()) {
-                setSubCategories(doc.data().list);
+                setSubCategories(doc.data().list || doc.data().categories || []);
             }
         }
     );
