@@ -679,26 +679,46 @@ const [currentPage, setCurrentPage] = useState('home');
     const [storeSettings, setStoreSettings] = useState(STORE_SETTINGS);
             
     useEffect(() => {
-        // 1. Listen for Products
-        const q = window.FB.query(
-            window.FB.collection(window.FB.db, "products"), 
-            window.FB.orderBy("createdAt", "desc")
-        );
-        const unsubProducts = window.FB.onSnapshot(q, (snapshot) => {
-            const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setProducts(docs);
-            setIsInitialLoading(false); // This stops the splash screen when data arrives
-        });
+    // 1. Products
+    const q = window.FB.query(
+        window.FB.collection(window.FB.db, "products"), 
+        window.FB.orderBy("createdAt", "desc")
+    );
 
-        // 2. Listen for Categories
-        const unsubCats = window.FB.onSnapshot(window.FB.doc(window.FB.db, "settings", "categories"), (doc) => {
+    const unsubProducts = window.FB.onSnapshot(q, (snapshot) => {
+        const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setProducts(docs);
+        setIsInitialLoading(false);
+    });
+
+    // 2. Categories ✅ (MOVE UP HERE)
+    const unsubCats = window.FB.onSnapshot(
+        window.FB.doc(window.FB.db, "settings", "categories"),
+        (doc) => {
             if (doc.exists()) {
                 setSubCategories(doc.data().list);
             }
-        });
+        }
+    );
 
-        return () => { unsubProducts(); unsubCats(); };
-    }, []);
+    // 3. Store Settings
+    const unsubSettings = window.FB.onSnapshot(
+        window.FB.doc(window.FB.db, "settings", "store"),
+        (doc) => {
+            if (doc.exists()) {
+                setStoreSettings(doc.data());
+            }
+        }
+    );
+
+    // ✅ ONLY ONE RETURN (at bottom)
+    return () => { 
+        unsubProducts(); 
+        unsubCats(); 
+        unsubSettings(); 
+    };
+
+}, []);
 
             useEffect(() => {
                 // Hide splash screen after 2 seconds
